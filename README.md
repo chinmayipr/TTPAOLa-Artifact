@@ -1,4 +1,4 @@
-# TyPAOL: Time-Bounded Consent for Data Privacy Compliance (Haskell Artifact)
+# TyPAOL: Time-Bounded Consent for Active Objects (Haskell Artifact)
 
 This artifact accompanies the paper *"Time-Bounded Consent for Active Objects"*.
 It is a reference implementation of the timed extension of TyPAOL: the type
