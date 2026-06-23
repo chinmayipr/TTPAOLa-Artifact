@@ -1,0 +1,57 @@
+cabal-version: 3.0
+name: timed-typaol
+version: 0.1.0.0
+synopsis: Reference implementation of the TyPAOL calculus (time-bounded consent for active objects)
+description:
+  Type checker, untyped and typed operational semantics, and scheduler for
+  TyPAOL, accompanying the paper "Time-Bounded Consent for Data Privacy
+  Compliance in Active Object Languages". See README.md for the artifact
+  evaluation guide.
+license: BSD-3-Clause
+license-file: LICENSE
+author: Chinmayi Prabhu Baramashetru
+maintainer: Chinmayi Prabhu Baramashetru
+category: Language
+tested-with: GHC == 9.12.2
+extra-doc-files: README.md
+build-type: Simple
+
+library
+  exposed-modules:
+    TyPAOL.Syntax
+    TyPAOL.Consent
+    TyPAOL.Runtime
+    TyPAOL.Eval
+    TyPAOL.Interpreter
+    TyPAOL.Types
+    TyPAOL.TypeChecker
+    TyPAOL.TypedInterpreter
+    TyPAOL.Scheduler
+    TyPAOL.Examples.FoodDelivery
+  build-depends:
+    base >= 4.17 && < 5,
+    containers >= 0.6,
+    mtl >= 2.3
+  hs-source-dirs: src
+  default-language: GHC2021
+  default-extensions: LambdaCase, OverloadedStrings
+
+executable timed-typaol
+  main-is: Main.hs
+  hs-source-dirs: app
+  build-depends: base, timed-typaol
+  default-language: GHC2021
+
+test-suite tests
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+    ConsentTest
+    EvalTest
+    InterpreterTest
+    MigrationTest
+    SafetyTest
+    TypeCheckerTest
+  hs-source-dirs: test
+  build-depends: base, timed-typaol, hspec >= 2.10, QuickCheck >= 2.14, containers, mtl >= 2.3
+  default-language: GHC2021
