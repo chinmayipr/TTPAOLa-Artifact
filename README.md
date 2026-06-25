@@ -1,4 +1,4 @@
-# TTPAOLa: Time-Bounded Consent for Active Objects (Haskell Artifact)
+# TT-PAOLa: Time-Bounded Consent for Active Objects (Haskell Artifact)
 
 This artifact accompanies the paper *"Time-Bounded Consent for Active Objects"*.
 It is a reference implementation of the timed extension of TyPAOL: the type
