@@ -3,13 +3,13 @@ module EvalTest where
 import qualified Data.Map.Strict as Map
 import Test.Hspec
 
-import TyPAOL.Consent (RTag (..))
-import TyPAOL.Eval
-import TyPAOL.Runtime (TaggedVal (..), Value (..))
-import TyPAOL.Syntax
+import TTpaola.Consent (RTag (..))
+import TTpaola.Eval
+import TTpaola.Runtime (TaggedVal (..), Value (..))
+import TTpaola.Syntax
 
 spec :: Spec
-spec = describe "TyPAOL.Eval" $ do
+spec = describe "TTpaola.Eval" $ do
   it "evaluates literals" $ do
     evalVE Map.empty (VLitInt 3) `shouldBe` Right (TaggedVal (VInt_ 3) RTagEmpty)
 

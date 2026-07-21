@@ -4,11 +4,11 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Test.Hspec
 
-import TyPAOL.Consent
-import TyPAOL.Syntax (Action (..), ClassName)
+import TTpaola.Consent
+import TTpaola.Syntax (Action (..), ClassName)
 
 spec :: Spec
-spec = describe "TyPAOL.Consent" $ do
+spec = describe "TTpaola.Consent" $ do
   it "tagCombine identity (left)" $ do
     let x = RTag (Set.fromList ["u"]) (Set.fromList ["p"])
     tagCombine RTagEmpty x `shouldBe` x
@@ -59,7 +59,6 @@ spec = describe "TyPAOL.Consent" $ do
     Set.map ceExpiry entries `shouldBe` Set.singleton 12
 
   it "addConsent: same (class,purpose) for an action is overwritten" $ do
-    -- This exercises the new ClassName-based key (was EntityName before).
     let u = "u1"
         c = "Courier"
         p = "Delivery"

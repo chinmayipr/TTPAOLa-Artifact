@@ -1,13 +1,13 @@
 {-# LANGUAGE LambdaCase #-}
-module TyPAOL.Scheduler where
+module TTpaola.Scheduler where
 
 import Control.Monad.Except
 import Control.Monad.State.Strict
 import qualified Data.Map.Strict as Map
-import TyPAOL.Interpreter
-import TyPAOL.Runtime
-import TyPAOL.Syntax (Duration, MethodName, ObjId)
-import TyPAOL.TypedInterpreter (activateTyped, bindMessageTyped, stepInstantTyped)
+import TTpaola.Interpreter
+import TTpaola.Runtime
+import TTpaola.Syntax (Duration, MethodName, ObjId)
+import TTpaola.TypedInterpreter (activateTyped, bindMessageTyped, stepInstantTyped)
 
 data StepResult
   = StepInstant ObjId

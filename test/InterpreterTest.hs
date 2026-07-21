@@ -1,5 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
--- | Operational tests for the fetch timeout behaviour.
+-- Operational tests for the fetch timeout behaviour
 module InterpreterTest where
 
 import Control.Monad.Except
@@ -8,15 +8,15 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Test.Hspec
 
-import TyPAOL.Consent
-import TyPAOL.Interpreter
-import TyPAOL.Runtime
-import TyPAOL.Scheduler
-import TyPAOL.Syntax
-import TyPAOL.TypeChecker (inferMethodMeta)
+import TTpaola.Consent
+import TTpaola.Interpreter
+import TTpaola.Runtime
+import TTpaola.Scheduler
+import TTpaola.Syntax
+import TTpaola.TypeChecker (inferMethodMeta)
 
 -- Build a minimal config containing an object that runs the expression we
--- want to step, plus an unresolved future "f0".
+-- want to step, plus an unresolved future f0.
 mkConfig :: Expr -> Config
 mkConfig e =
   Config
@@ -58,7 +58,7 @@ runStep :: InterpM a -> Config -> Either RuntimeError (a, Config)
 runStep m cfg = runExcept (runStateT m cfg)
 
 spec :: Spec
-spec = describe "TyPAOL.Interpreter" $ do
+spec = describe "TTpaola.Interpreter" $ do
 
   describe "#13 fetch with d > 0: timed step decrements delta" $ do
     it "fetch(f0)^4 with Delta=1 reduces to fetch(f0)^3" $ do
@@ -105,11 +105,10 @@ spec = describe "TyPAOL.Interpreter" $ do
         Right (EVal VLitUnit, _) -> pure ()
         other -> expectationFailure ("unexpected: " ++ show other)
     it "delay delta ; e2  steps to e2 once the delay has elapsed" $ do
-      -- delay 3 ; (return 7)  encoded as  let _ = delay 3 in (return 7)
       let inner = EVal (VLitInt 7)
           e = ELet "_" TUnit (EDelay 3) inner
           cfg = mkConfig e
-      -- One timed step of size 3 elapses the delay.
+      -- One timed step of size 3 elapses the delay
       case runStep (stepTimed "o0" (cfgObjects cfg Map.! "o0") 3) cfg of
         Right (ELet _ _ (EVal VLitUnit) _, _) -> pure ()
         other -> expectationFailure ("unexpected: " ++ show other)

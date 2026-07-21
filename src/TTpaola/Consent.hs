@@ -1,10 +1,10 @@
-module TyPAOL.Consent where
+module TTpaola.Consent where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Map.Strict (Map)
-import TyPAOL.Syntax (Action (..), ClassName, Purpose, UserId, Tag (..))
+import TTpaola.Syntax (Action (..), ClassName, Purpose, UserId, Tag (..))
 
 -- Runtime tag: concrete users, not variables.
 data RTag = RTagEmpty | RTag (Set UserId) (Set Purpose)
@@ -84,26 +84,31 @@ actionAllowed sigma cname act (RTag users purposes) tau
           (Set.toList entries)
 
 -- All allowed actions for a consent environment, class, tag, and time, with
--- the class as the accountable entity.
+-- the class(here class can be considered as the entity).
 allowedActions :: ConsentEnv -> ClassName -> RTag -> Int -> Set Action
 allowedActions sigma cname t tau =
   Set.filter (\a -> actionAllowed sigma cname a t tau) allActions
 
+-- Paper Fig. 3: comply predicates require *sets* of actions.
 complyU :: ConsentEnv -> ClassName -> RTag -> Int -> Bool
 complyU sigma cname = actionAllowed sigma cname Use
 
 complyC :: ConsentEnv -> ClassName -> RTag -> Int -> Bool
-complyC sigma cname = actionAllowed sigma cname Collect
+complyC sigma cname t tau =
+  actionAllowed sigma cname Use t tau
+    && actionAllowed sigma cname Collect t tau
 
 complyT :: ConsentEnv -> ClassName -> RTag -> Int -> Bool
-complyT sigma cname = actionAllowed sigma cname Transfer
+complyT sigma cname t tau =
+  actionAllowed sigma cname Use t tau
+    && actionAllowed sigma cname Transfer t tau
 
--- Store compliance: both the callee's class (the object) and the caller's
--- class must allow the Store action.
-complyS :: ConsentEnv -> ClassName -> ClassName -> RTag -> Int -> Bool
-complyS sigma cObj cCaller t tau =
-  actionAllowed sigma cObj Store t tau
-    && actionAllowed sigma cCaller Store t tau
+-- Paper Fig. 3: {store, use, collect} subseteq A(Sigma, C, bu, tau) for the object's class.
+complyS :: ConsentEnv -> ClassName -> RTag -> Int -> Bool
+complyS sigma cname t tau =
+  actionAllowed sigma cname Store t tau
+    && actionAllowed sigma cname Use t tau
+    && actionAllowed sigma cname Collect t tau
 
 addConsent :: ConsentEnv -> UserId -> ClassName -> Action -> Purpose -> Int -> ConsentEnv
 addConsent sigma0 u cname act purpose absExpiry =
@@ -136,20 +141,35 @@ remExpired sigma tau =
     let es' = Set.filter (\e -> ceExpiry e >= tau) es
      in if Set.null es' then Nothing else Just es'
 
+--  Sigma1 leq Sigma2 iff every entry (C, tau) in Sigma1 has a matching
+-- (C, tau') in Sigma2 with tau <= tau' (purpose must match as well, since we keep it).
 consentLeq :: ConsentEnv -> ConsentEnv -> Bool
 consentLeq s1 s2 =
   Map.keysSet s1 `Set.isSubsetOf` Map.keysSet s2
-    && all (\u -> userLeq u (Map.lookup u s1) (Map.lookup u s2)) (Map.keys s1)
+    && all (\u -> userLeq (Map.lookup u s1) (Map.lookup u s2)) (Map.keys s1)
  where
-  userLeq :: UserId -> Maybe PolicyMap -> Maybe PolicyMap -> Bool
-  userLeq _ Nothing _ = True
-  userLeq _ (Just _) Nothing = False
-  userLeq _ (Just pm1) (Just pm2) =
+  userLeq :: Maybe PolicyMap -> Maybe PolicyMap -> Bool
+  userLeq Nothing _ = True
+  userLeq (Just _) Nothing = False
+  userLeq (Just pm1) (Just pm2) =
     Map.keysSet pm1 `Set.isSubsetOf` Map.keysSet pm2
       && all
         ( \a ->
-            maybe False (`entriesLeq` maybe Set.empty id (Map.lookup a pm2)) (Map.lookup a pm1)
+            entriesLeq
+              (maybe Set.empty id (Map.lookup a pm1))
+              (maybe Set.empty id (Map.lookup a pm2))
         )
         (Map.keys pm1)
   entriesLeq :: Set ConsentEntry -> Set ConsentEntry -> Bool
-  entriesLeq e1 e2 = e1 `Set.isSubsetOf` e2
+  entriesLeq e1 e2 =
+    all
+      ( \e ->
+          any
+            ( \e' ->
+                ceClass e == ceClass e'
+                  && cePurpose e == cePurpose e'
+                  && ceExpiry e <= ceExpiry e'
+            )
+            (Set.toList e2)
+      )
+      (Set.toList e1)

@@ -1,11 +1,11 @@
 {-# LANGUAGE LambdaCase #-}
-module TyPAOL.Eval where
+module TTpaola.Eval where
 
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
-import TyPAOL.Consent (RTag (..), tagCombine, tagFromSource)
-import TyPAOL.Runtime
-import TyPAOL.Syntax
+import TTpaola.Consent (RTag (..), tagCombine, tagFromSource)
+import TTpaola.Runtime
+import TTpaola.Syntax
 
 data EvalError
   = UndefinedField FieldName

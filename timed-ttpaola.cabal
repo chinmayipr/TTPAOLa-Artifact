@@ -1,10 +1,10 @@
 cabal-version: 3.0
-name: timed-typaol
+name: timed-ttpaola
 version: 0.1.0.0
-synopsis: Reference implementation of the TyPAOL calculus (time-bounded consent for active objects)
+synopsis: Reference implementation of the TTpaola calculus (time-bounded consent for active objects)
 description:
   Type checker, untyped and typed operational semantics, and scheduler for
-  TyPAOL, accompanying the paper "Time-Bounded Consent for Data Privacy
+  TTpaola, accompanying the paper "Time-Bounded Consent for Data Privacy
   Compliance in Active Object Languages". See README.md for the artifact
   evaluation guide.
 license: BSD-3-Clause
@@ -18,16 +18,16 @@ build-type: Simple
 
 library
   exposed-modules:
-    TyPAOL.Syntax
-    TyPAOL.Consent
-    TyPAOL.Runtime
-    TyPAOL.Eval
-    TyPAOL.Interpreter
-    TyPAOL.Types
-    TyPAOL.TypeChecker
-    TyPAOL.TypedInterpreter
-    TyPAOL.Scheduler
-    TyPAOL.Examples.FoodDelivery
+    TTpaola.Syntax
+    TTpaola.Consent
+    TTpaola.Runtime
+    TTpaola.Eval
+    TTpaola.Interpreter
+    TTpaola.Types
+    TTpaola.TypeChecker
+    TTpaola.TypedInterpreter
+    TTpaola.Scheduler
+    TTpaola.Examples.FoodDelivery
   build-depends:
     base >= 4.17 && < 5,
     containers >= 0.6,
@@ -36,10 +36,10 @@ library
   default-language: GHC2021
   default-extensions: LambdaCase, OverloadedStrings
 
-executable timed-typaol
+executable timed-ttpaola
   main-is: Main.hs
   hs-source-dirs: app
-  build-depends: base, timed-typaol
+  build-depends: base, timed-ttpaola
   default-language: GHC2021
 
 test-suite tests
@@ -49,9 +49,10 @@ test-suite tests
     ConsentTest
     EvalTest
     InterpreterTest
+    LitmusTest
     MigrationTest
     SafetyTest
     TypeCheckerTest
   hs-source-dirs: test
-  build-depends: base, timed-typaol, hspec >= 2.10, containers, mtl >= 2.3
+  build-depends: base, timed-ttpaola, hspec >= 2.10, containers, mtl >= 2.3
   default-language: GHC2021

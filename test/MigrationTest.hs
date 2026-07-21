@@ -4,17 +4,17 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Map.Strict (Map)
-import Data.List (find)
+import Data.List (find, foldl')
 import Data.Maybe (fromJust, fromMaybe)
 import Test.Hspec
 
-import TyPAOL.Consent
-import TyPAOL.Examples.FoodDelivery (foodDelivery)
-import TyPAOL.Runtime
-import TyPAOL.Syntax
-import TyPAOL.TypeChecker
-import TyPAOL.TypedInterpreter (instAnn)
-import TyPAOL.Types
+import TTpaola.Consent
+import TTpaola.Examples.FoodDelivery (delta1, delta2, foodDelivery)
+import TTpaola.Runtime
+import TTpaola.Syntax
+import TTpaola.TypeChecker
+import TTpaola.TypedInterpreter (instAnn)
+import TTpaola.Types
 
 
 ct :: ClassTable
@@ -48,12 +48,12 @@ syntheticEnvs c m =
   taggedField _          = TaggedVal (VInt_ 0)   RTagEmpty
 
   taggedParam :: Type -> String -> TaggedVal
-  taggedParam TUser nm        = TaggedVal (VUserId_ nm) RTagEmpty
-  taggedParam (TClass _) _    = TaggedVal (VObjId_ "o") RTagEmpty
+  taggedParam TUser nm         = TaggedVal (VUserId_ nm) RTagEmpty
+  taggedParam (TClass _) _     = TaggedVal (VObjId_ "o") RTagEmpty
   taggedParam (TPersonal _) nm = TaggedVal (VInt_ 0) (RTag (Set.singleton nm) (Set.singleton "Delivery"))
-  taggedParam TInt _          = TaggedVal (VInt_ 0) RTagEmpty
-  taggedParam TBool _         = TaggedVal (VBool_ False) RTagEmpty
-  taggedParam TUnit _         = TaggedVal VUnit_ RTagEmpty
+  taggedParam TInt _           = TaggedVal (VInt_ 0) RTagEmpty
+  taggedParam TBool _          = TaggedVal (VBool_ False) RTagEmpty
+  taggedParam TUnit _          = TaggedVal VUnit_ RTagEmpty
 
 methodUc :: ClassName -> MethodName -> Set UserId
 methodUc c m =
@@ -67,6 +67,7 @@ methodUm c m =
       (_, sigma) = syntheticEnvs c m
    in Set.map (\x -> let TaggedVal (VUserId_ u) _ = sigma Map.! x in u) umVars
 
+-- Example 2 Sigma0 plus Courier consent from setAddrCons (delta1 = 11).
 bootstrapWithCourier :: ConsentEnv
 bootstrapWithCourier =
   foldr
@@ -74,24 +75,46 @@ bootstrapWithCourier =
     Map.empty
     [ ("alice", "Plat",    Use,      "Delivery", 80)
     , ("alice", "Plat",    Collect,  "Delivery", 80)
-    , ("alice", "Plat",    Store,    "Delivery", 80)
     , ("alice", "Plat",    Transfer, "Delivery", 80)
-    , ("alice", "Courier", Use,      "Delivery", 50)
-    , ("alice", "Courier", Collect,  "Delivery", 50)
-    , ("alice", "Courier", Transfer, "Delivery", 50)
+    , ("alice", "Courier", Use,      "Delivery", delta1)
+    , ("alice", "Courier", Collect,  "Delivery", delta1)
+    , ("alice", "Courier", Transfer, "Delivery", delta1)
     ]
 
 
-activates :: ConsentEnv -> ClassName -> ClassName -> ClassName -> Int -> Bool
-activates sigma callerClass calleeClass _aliceClass tau =
+activates :: ConsentEnv -> ClassName -> Int -> Bool
+activates sigma calleeClass tau =
   let (cn, _, _) = checkMethod calleeClass "deliver"
       (phi, sigmaParams) = syntheticEnvsAlice calleeClass "deliver"
-   in all (constraintOk sigma callerClass phi sigmaParams tau) (Set.toList cn)
+   in all (constraintOk sigma calleeClass phi sigmaParams tau) (Set.toList cn)
  where
-  constraintOk sig acc phi sg tau' (ACnstr act ann _ dur) =
+  -- Mirrors InstCnstr: act in A(Sigma[Delta]_tau, C, InstAnn(Lambda), tau+delta).
+  constraintOk sig acc phi sg tau' (ACnstr act ann acDelta dur) =
     let tg = instAnn ann phi sg
-        c = if act == Store then calleeClass else acc
-     in act `Set.member` allowedActions sig c tg (tau' + dur)
+        sigma' = applyAcDelta sig sg acDelta tau'
+     in act `Set.member` allowedActions sigma' acc tg (tau' + dur)
+
+  applyAcDelta sig sg acDelta tau0 =
+    foldl'
+      ( \s (x, r) ->
+          let TaggedVal (VUserId_ u) _ = sg Map.! x
+           in Map.alter (\mchi -> Just (plcyR r (fromMaybe Map.empty mchi) tau0)) u s
+      )
+      sig
+      [ (x, r) | (x, RTUser r) <- Map.toList acDelta ]
+
+  plcyR PBase chi _ = chi
+  plcyR (PAdd r cname act p dur) chi tau0 =
+    let chi' = plcyR r chi tau0
+        newEntry = CE cname p (tau0 + dur)
+        ins Nothing = Set.singleton newEntry
+        ins (Just es) =
+          let (same, _) = Set.partition (\e -> ceClass e == cname && cePurpose e == p) es
+           in if Set.null same
+                then Set.insert newEntry es
+                else Set.insert newEntry (Set.difference es same)
+     in Map.alter (Just . ins) act chi'
+
 
 syntheticEnvsAlice :: ClassName -> MethodName -> (Map FieldName TaggedVal, Map VarName TaggedVal)
 syntheticEnvsAlice c m =
@@ -105,16 +128,16 @@ syntheticEnvsAlice c m =
   taggedField (TClass _) = TaggedVal (VObjId_ "o") RTagEmpty
   taggedField _          = TaggedVal (VInt_ 0) RTagEmpty
   taggedParam :: Type -> UserId -> TaggedVal
-  taggedParam TUser u         = TaggedVal (VUserId_ u) RTagEmpty
-  taggedParam (TClass _) _    = TaggedVal (VObjId_ "o") RTagEmpty
-  taggedParam (TPersonal _) u = TaggedVal (VInt_ 0) (RTag (Set.singleton u) (Set.singleton "Delivery"))
-  taggedParam TInt _          = TaggedVal (VInt_ 0) RTagEmpty
-  taggedParam TBool _         = TaggedVal (VBool_ False) RTagEmpty
-  taggedParam TUnit _         = TaggedVal VUnit_ RTagEmpty
+  taggedParam TUser u          = TaggedVal (VUserId_ u) RTagEmpty
+  taggedParam (TClass _) _     = TaggedVal (VObjId_ "o") RTagEmpty
+  taggedParam (TPersonal _) u  = TaggedVal (VInt_ 0) (RTag (Set.singleton u) (Set.singleton "Delivery"))
+  taggedParam TInt _           = TaggedVal (VInt_ 0) RTagEmpty
+  taggedParam TBool _          = TaggedVal (VBool_ False) RTagEmpty
+  taggedParam TUnit _          = TaggedVal VUnit_ RTagEmpty
 
 
 spec :: Spec
-spec = describe "TyPAOL migration (Entity to Class, get to fetch, delay delta.e to delay delta)" $ do
+spec = describe "TTpaola migration (Entity to Class, get to fetch, delay delta.e to delay delta)" $ do
 
   describe "#2 setAddrCons" $ do
     it "Cn = empty set" $ do
@@ -159,15 +182,15 @@ spec = describe "TyPAOL migration (Entity to Class, get to fetch, delay delta.e 
       methodUc "Plat" "getAddr" `shouldBe` Set.singleton "u2"
 
   describe "#5 deliver" $ do
-    it "Cn actions include Use and Collect" $ do
+    it "Cn actions include Use and Collect (paper: fetch constraints)" $ do
       let (cn, _, _) = checkMethod "Courier" "deliver"
           actions = Set.map acAction cn
       Set.fromList [Use, Collect] `Set.isSubsetOf` actions `shouldBe` True
-    it "Max constraint dur is 14 (= delta_out)" $ do
+    it "Max constraint dur is 4 (fetch timeout offset)" $ do
       let (cn, _, _) = checkMethod "Courier" "deliver"
           durs = Set.map acDur cn
-      maximum durs `shouldBe` 14
-    it "delta_out = 14" $ do
+      maximum durs `shouldBe` 4
+    it "delta_out = 14 (= 4 + max(5,10))" $ do
       let (_, _, d) = checkMethod "Courier" "deliver"
       d `shouldBe` 14
     it "Um = empty set" $ do
@@ -186,9 +209,6 @@ spec = describe "TyPAOL migration (Entity to Class, get to fetch, delay delta.e 
       Set.null (umD `Set.intersection` ucG) `shouldBe` True
       Set.null (umG `Set.intersection` ucD) `shouldBe` True
     it "renewCons and deliver interfere (Um intersection Uc = {alice})" $ do
-      -- Both methods refer to a user variable. We model the case where both
-      -- threads receive @alice@ as their actual user argument: the synthetic
-      -- env binds @u4@ maps to "alice" and @u3@ maps to "alice".
       let (_, umRv, _) = checkMethod "Plat" "renewCons"
           (_, sigmaR) = syntheticEnvsAlice "Plat" "renewCons"
           umR = Set.map (\x -> let TaggedVal (VUserId_ u) _ = sigmaR Map.! x in u) umRv
@@ -200,19 +220,18 @@ spec = describe "TyPAOL migration (Entity to Class, get to fetch, delay delta.e 
       umR `Set.intersection` ucD `shouldBe` Set.singleton "alice"
 
   describe "#8/#9 activation timing" $ do
-    it "deliver at tau=0 with expiry 50 is accepted" $ do
-      activates bootstrapWithCourier "Courier" "Courier" "alice" 0 `shouldBe` True
-    it "deliver at tau=40 with expiry 50 is rejected (40+14=54 > 50)" $ do
-      activates bootstrapWithCourier "Courier" "Courier" "alice" 40 `shouldBe` False
+    it "deliver at tau=0 with expiry delta1=11 is accepted (0+4 <= 11)" $ do
+      activates bootstrapWithCourier "Courier" 0 `shouldBe` True
+    it "deliver at tau=8 with expiry delta1=11 is rejected (8+4=12 > 11)" $ do
+      activates bootstrapWithCourier "Courier" 8 `shouldBe` False
 
-  describe "#10 overwrite: renewCons at tau=10" $ do
+  describe "#10 overwrite: renewCons at tau=1 (Scenario 3)" $ do
     let sigmaAfterRenew =
           foldr
             (\(c, a, p, e) sig -> addConsent sig "alice" c a p e)
             bootstrapWithCourier
-            [ ("Courier", Use,      "Delivery", 10 + 20)
-            , ("Courier", Transfer, "Delivery", 10 + 20)
-              -- collect is NOT renewed (intentional mismatch with the spec)
+            [ ("Courier", Use,      "Delivery", 1 + delta2)
+            , ("Courier", Transfer, "Delivery", 1 + delta2)
             ]
         useEntry =
           maybe Set.empty id (Map.lookup "alice" sigmaAfterRenew >>= Map.lookup Use)
@@ -220,30 +239,30 @@ spec = describe "TyPAOL migration (Entity to Class, get to fetch, delay delta.e 
           maybe Set.empty id (Map.lookup "alice" sigmaAfterRenew >>= Map.lookup Collect)
         traEntry =
           maybe Set.empty id (Map.lookup "alice" sigmaAfterRenew >>= Map.lookup Transfer)
-    it "use   expiry overwritten to 30" $ do
+    it "use expiry overwritten to 1+delta2 = 7" $ do
       Set.map ceExpiry (Set.filter (\e -> ceClass e == "Courier") useEntry)
-        `shouldBe` Set.singleton 30
-    it "transfer expiry overwritten to 30" $ do
+        `shouldBe` Set.singleton (1 + delta2)
+    it "transfer expiry overwritten to 1+delta2 = 7" $ do
       Set.map ceExpiry (Set.filter (\e -> ceClass e == "Courier") traEntry)
-        `shouldBe` Set.singleton 30
-    it "collect expiry stays at 50 (not renewed)" $ do
+        `shouldBe` Set.singleton (1 + delta2)
+    it "collect expiry stays at delta1 = 11 (not renewed)" $ do
       Set.map ceExpiry (Set.filter (\e -> ceClass e == "Courier") colEntry)
-        `shouldBe` Set.singleton 50
+        `shouldBe` Set.singleton delta1
 
   describe "#11 activation after overwrite" $ do
     let sigmaAfterRenew =
           foldr
             (\(c, a, p, e) sig -> addConsent sig "alice" c a p e)
             bootstrapWithCourier
-            [ ("Courier", Use,      "Delivery", 30)
-            , ("Courier", Transfer, "Delivery", 30)
+            [ ("Courier", Use,      "Delivery", 1 + delta2)
+            , ("Courier", Transfer, "Delivery", 1 + delta2)
             ]
-    it "deliver at tau=20 is rejected (20+14=34 > 30 bottleneck on use)" $ do
-      activates sigmaAfterRenew "Courier" "Courier" "alice" 20 `shouldBe` False
+    it "deliver at tau=4 is rejected (4+4=8 > use/trans expiry 7)" $ do
+      activates sigmaAfterRenew "Courier" 4 `shouldBe` False
 
   describe "#12 RemExpired" $ do
-    it "at tau=51 all Courier entries are removed" $ do
-      let sigma' = remExpired bootstrapWithCourier 51
+    it "at tau=delta1+1 all Courier entries are removed" $ do
+      let sigma' = remExpired bootstrapWithCourier (delta1 + 1)
           courierEntries =
             [ e
             | (_, pm) <- Map.toList sigma'
@@ -252,18 +271,22 @@ spec = describe "TyPAOL migration (Entity to Class, get to fetch, delay delta.e 
             , ceClass e == "Courier"
             ]
       courierEntries `shouldBe` []
-    it "deliver at tau=51 is rejected" $ do
-      let sigma' = remExpired bootstrapWithCourier 51
-      activates sigma' "Courier" "Courier" "alice" 51 `shouldBe` False
+    it "deliver at tau=delta1+1 is rejected" $ do
+      let sigma' = remExpired bootstrapWithCourier (delta1 + 1)
+      activates sigma' "Courier" (delta1 + 1) `shouldBe` False
 
   describe "#13/#14 fetch timeout behavior (via interpreter)" $ do
-    it "fetch with d > timeout : timed step reduces to Err" $ do
-      -- See InterpreterTest (fetch timeout) for the operational check;
-      -- here we only sanity-check the static shape of the constraint.
+    it "fetch constraint offset is 4" $ do
       let (cn, _, _) = checkMethod "Courier" "deliver"
           fetchDurs = Set.filter (== 4) (Set.map acDur cn)
       Set.null fetchDurs `shouldBe` False
-    it "fetch with d <= timeout : Ok branch is reachable (max dur > 4)" $ do
-      let (cn, _, _) = checkMethod "Courier" "deliver"
-          maxDur = maximum (Set.map acDur cn)
-      maxDur > 4 `shouldBe` True
+    it "delta_out exceeds fetch timeout (Ok branch reachable in time)" $ do
+      let (_, _, dOut) = checkMethod "Courier" "deliver"
+      dOut > 4 `shouldBe` True
+
+  describe "consentLeq preorder" $ do
+    it "longer expiry is greater in the preorder" $ do
+      let s1 = addConsent Map.empty "alice" "Courier" Use "Delivery" 10
+          s2 = addConsent Map.empty "alice" "Courier" Use "Delivery" 20
+      consentLeq s1 s2 `shouldBe` True
+      consentLeq s2 s1 `shouldBe` False

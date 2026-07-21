@@ -1,15 +1,14 @@
--- | Demonstration of the core safety property of typed TyPAOL:
+-- Demonstration of the core safety property of typed TTpaola,
 --
 -- A typed thread is /activated/ only if @InstCnstr@ proves every consent
 -- requirement holds at the latest moment it will fire. Therefore once a
 -- thread starts running under the typed semantics, it cannot get stuck on
--- a consent violation. Under the untyped semantics the activation gate is
+-- a consent violation. Under the untyped semantics the activation check is
 -- absent, so the same scenario activates a thread that subsequently fails
 -- at runtime.
 --
 -- The example below is deliberately minimal: a single class @Demo@ with one
 -- method
---
 -- @
 -- riskyOp(U u, D x) {
 --   delay 10;
@@ -24,7 +23,7 @@
 -- at tau=10. The schedulers driven from this single configuration give
 -- diametrically opposed results:
 --
--- * Typed    to  @StepBind@ then @StepStuck@: the activation gate (@instCnstr@)
+-- * Typed    to  @StepBind@ then @StepStuck@: the activation check (@instCnstr@)
 --   rejects the message, no thread ever runs.
 --
 -- * Untyped  to  @StepBind@, @StepActivate@, @StepTimeAdv 10@, then a
@@ -38,17 +37,16 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Test.Hspec
 
-import TyPAOL.Consent
-import TyPAOL.Interpreter
-import TyPAOL.Runtime
-import TyPAOL.Scheduler
-import TyPAOL.Syntax
-import TyPAOL.TypeChecker
-import TyPAOL.Types (AConstraint (..))
+import TTpaola.Consent
+import TTpaola.Interpreter
+import TTpaola.Runtime
+import TTpaola.Scheduler
+import TTpaola.Syntax
+import TTpaola.TypeChecker
+import TTpaola.Types (AConstraint (..))
 
--- ---------------------------------------------------------------------------
--- The minimal program
--- ---------------------------------------------------------------------------
+
+--Minimal program
 
 demoProg :: Program
 demoProg =
@@ -82,9 +80,9 @@ demoProg =
 demoCT :: ClassTable
 demoCT = either (error . show) id (inferMethodMeta (buildClassTable demoProg))
 
--- | One @Demo@ object plus a single in-flight message @riskyOp(alice, x)@,
+-- One @Demo@ object plus a single in-flight message @riskyOp(alice, x)@,
 -- where @x@ carries the runtime tag @<{alice},{Delivery}>@. Sigma grants alice
--- @Demo@ consent for @Use@ and @Collect@ - but only until tau=5.
+-- @Demo@ consent for @Use@ and @Collect@, but only until tau=5.
 demoConfig :: Config
 demoConfig =
   Config
@@ -118,14 +116,12 @@ demoConfig =
       , msgFut = "f_ret"
       , msgCallerClass = "Demo"
       }
+  -- Rule typed (bind) requires complyT = {use,trans}; Collect is needed later at the let.
   sig0 =
-    addConsent
-      (addConsent Map.empty "alice" "Demo" Collect "Delivery" 5)
-      "alice"
-      "Demo"
-      Use
-      "Delivery"
-      5
+    foldr
+      (\(a, e) s -> addConsent s "alice" "Demo" a "Delivery" e)
+      Map.empty
+      [(Use, 5), (Collect, 5), (Transfer, 5)]
 
 runFrom :: Config -> InterpM a -> Either RuntimeError (a, Config)
 runFrom cfg m = runExcept (runStateT m cfg)
@@ -138,9 +134,7 @@ isStepActivate _ = False
 isStepStuck StepStuck = True
 isStepStuck _ = False
 
--- ---------------------------------------------------------------------------
 -- Tests
--- ---------------------------------------------------------------------------
 
 spec :: Spec
 spec = describe "Type safety: typed activation prevents stuck runs" $ do
@@ -177,7 +171,7 @@ spec = describe "Type safety: typed activation prevents stuck runs" $ do
         expectationFailure ("untyped run completed without violation - should have been stuck. Steps: " ++ show steps)
 
   it "UNTYPED semantics: the run gets past Bind and Activate before failing" $ do
-    -- This pins down precisely *where* the untyped run gets stuck. We drive
+    -- This pins down precisely where the untyped run gets stuck. We drive
     -- the scheduler one step at a time and walk the configuration forward
     -- until either a violation fires or we exhaust the simulation budget.
     let step1 = step demoCT False

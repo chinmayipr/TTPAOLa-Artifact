@@ -1,10 +1,10 @@
-module TyPAOL.Types where
+module TTpaola.Types where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Map.Strict (Map)
 import Data.Set (Set)
-import TyPAOL.Syntax
+import TTpaola.Syntax
   ( Action
   , ClassName
   , Duration
@@ -17,7 +17,7 @@ import TyPAOL.Syntax
   , VarRef (..)
   )
 
-import TyPAOL.Consent (tagCombineSrc, tagLeqSrc)
+import TTpaola.Consent (tagCombineSrc, tagLeqSrc)
 
 data AConstraint = ACnstr
   { acAction :: Action
@@ -71,12 +71,23 @@ annotationOf _ = TAEmpty
 cmpTy :: Type -> ExtType -> Bool
 cmpTy (TClass c1) (RTClass c2 _) = c1 == c2
 cmpTy TUser (RTUser _) = True
+-- Primitive / personal data: allow any tag annotation; personal B# is
+-- compatible with B when the underlying base matches (ops on personal Int, etc.).
+cmpTy TInt (DTBase TInt _) = True
+cmpTy TInt (DTBase (TPersonal TInt) _) = True
+cmpTy TBool (DTBase TBool _) = True
+cmpTy TBool (DTBase (TPersonal TBool) _) = True
+cmpTy TUnit (DTBase TUnit _) = True
 cmpTy t (DTBase t' TAEmpty) = t == t' || matchPersonal t t'
-cmpTy (TPersonal t) (DTBase (TPersonal t') (TA _ _)) = t == t'
-cmpTy (TPersonal t) (DTBase t' (TA _ _)) = t == t'
+cmpTy (TPersonal t) (DTBase (TPersonal t') _) = t == t'
+cmpTy (TPersonal t) (DTBase t' _) = t == t'
+cmpTy TInt (DTRes TInt _) = True
+cmpTy TInt (DTRes (TPersonal TInt) _) = True
+cmpTy TBool (DTRes TBool _) = True
+cmpTy TBool (DTRes (TPersonal TBool) _) = True
 cmpTy t (DTRes t' TAEmpty) = t == t' || matchPersonal t t'
-cmpTy (TPersonal t) (DTRes (TPersonal t') (TA _ _)) = t == t'
-cmpTy (TPersonal t) (DTRes t' (TA _ _)) = t == t'
+cmpTy (TPersonal t) (DTRes (TPersonal t') _) = t == t'
+cmpTy (TPersonal t) (DTRes t' _) = t == t'
 cmpTy _ _ = False
 
 -- matchPersonal (TPersonal t) t' holds iff t == t'.

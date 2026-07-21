@@ -1,8 +1,8 @@
 module Main where
 
-import TyPAOL.Examples.FoodDelivery (foodDelivery)
-import TyPAOL.Runtime (buildClassTable, initConfig)
-import TyPAOL.TypeChecker (inferMethodMeta)
+import TTpaola.Examples.FoodDelivery (foodDelivery)
+import TTpaola.Runtime (buildClassTable, initConfig)
+import TTpaola.TypeChecker (inferMethodMeta)
 
 main :: IO ()
 main = do

@@ -1,5 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
-module TyPAOL.Interpreter where
+module TTpaola.Interpreter where
 
 import Control.Monad (forM_, mapM, unless, when)
 import Control.Monad.Except
@@ -7,10 +7,10 @@ import Control.Monad.State.Strict
 import Data.List (delete)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
-import TyPAOL.Consent
-import TyPAOL.Eval
-import TyPAOL.Runtime
-import TyPAOL.Syntax
+import TTpaola.Consent
+import TTpaola.Eval
+import TTpaola.Runtime
+import TTpaola.Syntax
 
 data RuntimeError
   = ConsentViolation Action ClassName RTag Int
@@ -87,7 +87,8 @@ stepInstant _ct oid obj = case objThread obj of
     case e of
       EAssign f ve -> do
         tv <- liftEval (evalVE phi ve)
-        unless (complyS sig clsObj clsCaller (tvTag tv) tau) $
+        -- ComplyS(Sigma, C, t, tau) for the object's class C.
+        unless (complyS sig clsObj (tvTag tv) tau) $
           throwError (ConsentViolation Store clsObj (tvTag tv) tau)
         modifyObject oid (\o -> o {objFields = Map.insert f tv (objFields o)})
         pure (EVal VLitUnit)
@@ -148,14 +149,19 @@ stepInstant _ct oid obj = case objThread obj of
         pure (EVal VLitUnit)
       EFetch ve d veElse -> do
         tvf <- liftEval (evalVE phi ve)
-        (futId, tv) <- case tvf of
-          TaggedVal (VFutId_ f) tg -> pure (f, tg)
+        futId <- case tvf of
+          TaggedVal (VFutId_ f) _ -> pure f
           _ -> throwError NoRuleApplies
-        unless (complyU sig clsCaller tv tau) $
-          throwError (ConsentViolation Use clsCaller tv tau)
         futMap <- gets cfgFutures
         case (Map.lookup futId futMap, d) of
-          (Just (Just tvRes), _) ->
+          -- (fetch): resolved + complyC on the payload -> Ok(tv).
+          (Just (Just tvRes), _) -> do
+            unless (complyC sig clsCaller (tvTag tvRes) tau) $
+              -- (fetch-adv): resolved but not-complyC is treated as "not ready", with d>0 the timed rule can still wait / time out.
+              -- With d=0 there is no progress -> stuck (consent violation).
+              if d == 0
+                then throwError (ConsentViolation Collect clsCaller (tvTag tvRes) tau)
+                else throwError NoRuleApplies
             pure (EVal (VOk (valExprFromTaggedVal tvRes)))
           -- Timeout already elapsed and still unresolved: take the Err branch
           -- now, since waitTime is 0 and no timed step would fire.
@@ -186,6 +192,8 @@ stepInstant _ct oid obj = case objThread obj of
         pure (EVal VLitUnit)
 
 -- Timed reduction by delta time units.
+-- (fetch-adv): wait when the future is unresolved *or* resolved but
+-- not-complyC; on timeout return Err(ve').
 stepTimed :: ObjId -> Object -> Duration -> InterpM Expr
 stepTimed oid obj delta = case objThread obj of
   Idle -> throwError NoTimedStep
@@ -205,10 +213,18 @@ stepTimed oid obj delta = case objThread obj of
             TaggedVal (VFutId_ f) _ -> pure f
             _ -> throwError NoTimedStep
           futMap <- gets cfgFutures
+          sig <- gets cfgConsent
+          tau <- gets cfgTime
+          let clsCaller = rtAccClass rt
           case Map.lookup futId futMap of
             Just Nothing -> do
               tvElse <- liftEval (evalVE phi veElse)
               pure (EVal (VErr (valExprFromTaggedVal tvElse)))
+            Just (Just tvRes)
+              | not (complyC sig clsCaller (tvTag tvRes) tau) -> do
+                  tvElse <- liftEval (evalVE phi veElse)
+                  pure (EVal (VErr (valExprFromTaggedVal tvElse)))
+              | otherwise -> throwError NoTimedStep
             _ -> throwError NoTimedStep
     ELet x ty e1 e2 -> do
       e1' <- stepTimed oid (obj {objThread = Running (rt {rtExpr = e1})}) delta
@@ -243,6 +259,7 @@ timeAdv = do
   sig <- gets cfgConsent
   updateCfg (\cfg -> cfg {cfgTime = tau1, cfgConsent = remExpired sig tau1})
 
+-- Rule (bind): complyT on every personal (tagged) argument before queueing.
 bindMessage :: ClassTable -> Message -> InterpM ()
 bindMessage ct msg = do
   let oid = msgCallee msg
@@ -254,6 +271,11 @@ bindMessage ct msg = do
       Map.lookup (cname, mth) (ctMBody ct)
   unless (length params == length (msgArgs msg)) $
     throwError (StuckConfig "arity mismatch")
+  sig <- gets cfgConsent
+  tau <- gets cfgTime
+  forM_ (msgArgs msg) $ \tv ->
+    unless (complyT sig cname (tvTag tv) tau) $
+      throwError (ConsentViolation Transfer cname (tvTag tv) tau)
   let body =
         foldr
           (\(p, tv) acc -> substitute p (valExprFromTaggedVal tv) acc)
@@ -263,7 +285,7 @@ bindMessage ct msg = do
         QueueEntry
           { qeExpr = body
           , qeFut = msgFut msg
-          , qeAccClass = cname -- accountable class is the callee's class
+          , qeAccClass = cname
           }
   updateCfg (\cfg -> cfg {cfgMessages = delete msg (cfgMessages cfg)})
   modifyObject oid (\o -> o {objQueue = objQueue o ++ [QUntyped qe]})

@@ -1,5 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
-module TyPAOL.TypeChecker where
+module TTpaola.TypeChecker where
 
 import Control.Monad.Except
 import Control.Monad (forM, unless)
@@ -8,9 +8,9 @@ import Data.List (find)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Data.Set (Set)
-import TyPAOL.Runtime (ClassTable (..))
-import TyPAOL.Syntax
-import TyPAOL.Types
+import TTpaola.Runtime (ClassTable (..))
+import TTpaola.Syntax
+import TTpaola.Types
 
 data TypeError = TypeError String deriving (Show)
 
@@ -90,11 +90,25 @@ typeCheckValExpr _ct = \case
       (_, Just et) -> pure (et, Set.empty)
       _ -> throwTy ("unknown field " ++ f)
   VThis -> throwTy "this not allowed as value expression in static typing"
-  VOp _op a b -> do
+  VOp op a b -> do
     (t1, c1) <- typeCheckValExpr _ct a
     (t2, c2) <- typeCheckValExpr _ct b
-    unless (cmpTy TInt t1 && cmpTy TInt t2) (throwTy "arithmetic operands")
-    pure (DTBase TInt TAEmpty, c1 <> c2)
+    case op of
+      And -> unless (cmpTy TBool t1 && cmpTy TBool t2) (throwTy "boolean operands")
+      Or -> unless (cmpTy TBool t1 && cmpTy TBool t2) (throwTy "boolean operands")
+      Eq -> unless (cmpTy TInt t1 && cmpTy TInt t2) (throwTy "equality operands")
+      Lt -> unless (cmpTy TInt t1 && cmpTy TInt t2) (throwTy "comparison operands")
+      Gt -> unless (cmpTy TInt t1 && cmpTy TInt t2) (throwTy "comparison operands")
+      _ -> unless (cmpTy TInt t1 && cmpTy TInt t2) (throwTy "arithmetic operands")
+    let ret = case op of
+          And -> TBool
+          Or -> TBool
+          Eq -> TBool
+          Lt -> TBool
+          Gt -> TBool
+          _ -> TInt
+        ann = taCompose (annotationOf t1) (annotationOf t2)
+    pure (DTBase ret ann, c1 <> c2)
   VTag ve t -> do
     (et, c) <- typeCheckValExpr _ct ve
     let ann = TA Set.empty t
@@ -127,6 +141,16 @@ typeCheckExpr ct = \case
       maybe (throwTy "unknown method") pure $
         Map.lookup (cname, m) (ctMType ct)
     unless (length argTys == length args) (throwTy "async arity")
+    -- Rule (async-call): distinct actuals for user-typed parameters (no aliasing).
+    let userActuals =
+          [ argVe
+          | (TUser, argVe) <- zip argTys args
+          ]
+        userVars = [x | VVar x <- userActuals]
+    unless (length userVars == length (Set.fromList userVars)) $
+      throwTy "async call: aliased user actual parameters"
+    unless (all (\a -> case a of VVar _ -> True; _ -> False) userActuals) $
+      throwTy "async call: user actuals must be variables"
     -- Look up the method declaration to obtain parameter names so we can
     -- substitute them with the caller's argument variables in the return
     -- annotation.
@@ -233,7 +257,9 @@ typeCheckExpr ct = \case
       RTUser _ -> pure ()
       _ -> throwTy "addCon expects user type"
     st <- get
-    let polDur = polDuration pol
+    -- Paper (t-add-cons): record R + <C,a,delta'+delta> where delta is the current offset.
+    d <- gets csDur
+    let polDur = polDuration pol + d
         upd = \case
           RTUser r -> RTUser (PAdd r (polClass pol) (polAction pol) (polPurpose pol) polDur)
           _ -> RTUser (PAdd PBase (polClass pol) (polAction pol) (polPurpose pol) polDur)
@@ -273,7 +299,10 @@ typeCheckMethod ct cname md = runExcept $ evalStateT go initSt
     pure (cn <> cnRet, um)
 
 typeCheckClass :: ClassTable -> ClassDecl -> Either TypeError [(MethodName, CnstrSet, Set VarName)]
-typeCheckClass ct cls =
+typeCheckClass ct cls = do
+  -- Paper (t-class): fields must not have user type.
+  unless (all (\(ty, _) -> ty /= TUser) (cdFields cls)) $
+    Left (TypeError ("class " ++ cdName cls ++ ": fields must not have user type"))
   forM (cdMethods cls) $ \m -> do
     (cn, um) <- typeCheckMethod ct (cdName cls) m
     pure (mdName m, cn, um)

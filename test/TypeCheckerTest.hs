@@ -4,12 +4,12 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Test.Hspec
 
-import TyPAOL.Syntax (Action (..), Tag (..), TagAnnotation (..))
-import TyPAOL.TypeChecker (cnstrC, cnstrS, cnstrT, cnstrU)
-import TyPAOL.Types (AConstraint (..))
+import TTpaola.Syntax (Action (..), Tag (..), TagAnnotation (..))
+import TTpaola.TypeChecker (cnstrC, cnstrS, cnstrT, cnstrU)
+import TTpaola.Types (AConstraint (..))
 
 spec :: Spec
-spec = describe "TyPAOL.TypeChecker" $ do
+spec = describe "TTpaola.TypeChecker" $ do
   it "CnstrC includes Collect and Use" $ do
     let ann = TA Set.empty (TagExpr Set.empty (Set.singleton "p"))
         delta = Map.empty

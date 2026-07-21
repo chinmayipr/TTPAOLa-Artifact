@@ -1,12 +1,12 @@
 # Pinned environment for artifact evaluation.
-# Build:  docker build -t typaol-artifact .
-# Test:   docker run --rm typaol-artifact
+# Build:  docker build -t ttpaola-artifact .
+# Test:   docker run --rm ttpaola-artifact
 FROM haskell:9.12.2
 
 WORKDIR /artifact
 
 # Resolve and cache dependencies first (faster rebuilds on source changes).
-COPY timed-typaol.cabal cabal.project ./
+COPY timed-ttpaola.cabal cabal.project ./
 RUN cabal update && cabal build --only-dependencies --enable-tests all
 
 COPY . .

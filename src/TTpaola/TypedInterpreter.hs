@@ -1,5 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
-module TyPAOL.TypedInterpreter where
+module TTpaola.TypedInterpreter where
 
 import Control.Monad.Except
 import Control.Monad.State.Strict
@@ -11,9 +11,9 @@ import Data.List (delete)
 import Data.Maybe (fromMaybe)
 import Data.Foldable (foldl')
 import Control.Monad (forM_, mapM, unless)
-import TyPAOL.Consent (ConsentEntry (..), PolicyMap, RTag (..), actionAllowed, addConsent, tagCombine, tagUsers)
-import TyPAOL.Eval
-import TyPAOL.Interpreter
+import TTpaola.Consent (ConsentEntry (..), PolicyMap, RTag (..), actionAllowed, addConsent, complyT, tagCombine, tagUsers)
+import TTpaola.Eval
+import TTpaola.Interpreter
   ( InterpM
   , RuntimeError (..)
   , freshFutId
@@ -24,9 +24,9 @@ import TyPAOL.Interpreter
   , putObject
   , valExprFromTaggedVal
   )
-import TyPAOL.Runtime
-import TyPAOL.Syntax
-import TyPAOL.Types
+import TTpaola.Runtime
+import TTpaola.Syntax
+import TTpaola.Types
 
 extractUserId :: TaggedVal -> UserId
 extractUserId (TaggedVal (VUserId_ u) _) = u
@@ -65,27 +65,28 @@ plcy PBase chi _ = chi
 plcy (PAdd r cname act p dur) chi tau =
   addToMap (plcy r chi tau) cname act p (tau + dur)
 
-instCnstr :: CnstrSet -> Map FieldName TaggedVal -> Map VarName TaggedVal -> ClassName -> ClassName -> DeltaEnv -> InterpM ()
-instCnstr cn phi sigma clsAcc clsCallee deltaEnv = do
+-- Paper Def. 2: InstCnstr uses the Delta stored *in each constraint*, and
+-- Sigma[Delta]_tau = apply plcy(R) for every user variable in that Delta.
+instCnstr :: CnstrSet -> Map FieldName TaggedVal -> Map VarName TaggedVal -> ClassName -> InterpM ()
+instCnstr cn phi sigma clsAcc = do
   sigmaBase <- gets cfgConsent
   tau <- gets cfgTime
-  let applyDelta sig (u, r) =
-        Map.alter
-          (\mchi -> Just (plcy r (fromMaybe Map.empty mchi) tau))
-          u
-          sig
-      sigma' =
-        foldl'
-          applyDelta
-          sigmaBase
-          [ (u, r)
-          | (x, RTUser r) <- Map.toList deltaEnv
-          , let u = extractUserId (sigma Map.! x)
-          ]
-  forM_ (Set.toList cn) $ \(ACnstr act ann _acDelta dur) -> do
-    let tag = instAnn ann phi sigma
-        cls = if act == Store then clsCallee else clsAcc
-        ok = actionAllowed sigma' cls act tag (tau + dur)
+  forM_ (Set.toList cn) $ \(ACnstr act ann acDelta dur) -> do
+    let applyDelta sig (u, r) =
+          Map.alter
+            (\mchi -> Just (plcy r (fromMaybe Map.empty mchi) tau))
+            u
+            sig
+        sigma' =
+          foldl'
+            applyDelta
+            sigmaBase
+            [ (u, r)
+            | (x, RTUser r) <- Map.toList acDelta
+            , let u = extractUserId (sigma Map.! x)
+            ]
+        tag = instAnn ann phi sigma
+        ok = actionAllowed sigma' clsAcc act tag (tau + dur)
     unless ok $ throwError (ActivationFailed act tag (tau + dur))
 
 -- Typed instantaneous reduction: no per-action compliance checks (the
@@ -194,12 +195,10 @@ tryInstCnstr ::
   Map FieldName TaggedVal ->
   Map VarName TaggedVal ->
   ClassName ->
-  ClassName ->
-  DeltaEnv ->
   InterpM (Either () ())
-tryInstCnstr cn phi sigma clsAcc clsCallee dlt =
+tryInstCnstr cn phi sigma clsAcc =
   catchError
-    (Right <$> instCnstr cn phi sigma clsAcc clsCallee dlt)
+    (Right <$> instCnstr cn phi sigma clsAcc)
     ( \case
         ActivationFailed _ _ _ -> pure (Left ())
         e -> throwError e
@@ -222,8 +221,6 @@ activateTyped oid = do
                   phi
                   sigma
                   (tqeAccClass tqe)
-                  (objClass obj)
-                  (tqeDelta tqe)
               case res of
                 Left () -> pure False
                 Right () -> do
@@ -259,6 +256,8 @@ activateTyped oid = do
   isUntyped (QUntyped _) = True
   isUntyped _ = False
 
+-- Paper (bind): complyT on personal args; attach Cn/Um from the method.
+-- Body is substituted with actuals (equivalent to paper's deferred subst at Act).
 bindMessageTyped :: ClassTable -> Message -> InterpM ()
 bindMessageTyped ct msg = do
   let oid = msgCallee msg
@@ -273,6 +272,11 @@ bindMessageTyped ct msg = do
       Map.lookup (cname, mth) (ctMethodMeta ct)
   unless (length params == length (msgArgs msg)) $
     throwError (StuckConfig "arity mismatch")
+  sig <- gets cfgConsent
+  tau <- gets cfgTime
+  forM_ (msgArgs msg) $ \tv ->
+    unless (complyT sig cname (tvTag tv) tau) $
+      throwError (ConsentViolation Transfer cname (tvTag tv) tau)
   let sigma0 =
         Map.fromList
           [ (p, tv)
@@ -291,7 +295,8 @@ bindMessageTyped ct msg = do
           , tqeParams = sigma0
           , tqeCn = cn0
           , tqeUmVars = um0
-          , tqeDelta = Map.empty
+          , -- Per-constraint Delta is used by InstCnstr; method-level Delta unused.
+            tqeDelta = Map.empty
           }
   updateCfg (\cfg -> cfg {cfgMessages = delete msg (cfgMessages cfg)})
   modifyObject oid (\o -> o {objQueue = objQueue o ++ [QTyped tqe]})

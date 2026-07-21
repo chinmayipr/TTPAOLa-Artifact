@@ -1,5 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
-module TyPAOL.Syntax where
+module TTpaola.Syntax where
 
 import Data.Set (Set)
 import qualified Data.Set as Set

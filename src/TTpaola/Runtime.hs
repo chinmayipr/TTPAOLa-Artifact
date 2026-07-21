@@ -1,13 +1,13 @@
-module TyPAOL.Runtime where
+module TTpaola.Runtime where
 
 import Data.List (foldl')
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import Data.Set (Set)
 import qualified Data.Set as Set
-import TyPAOL.Syntax
-import TyPAOL.Consent (ConsentEnv, RTag (..), addConsent)
-import TyPAOL.Types (CnstrSet, DeltaEnv)
+import TTpaola.Syntax
+import TTpaola.Consent (ConsentEnv, RTag (..), addConsent)
+import TTpaola.Types (CnstrSet, DeltaEnv)
 
 data TaggedVal = TaggedVal {tvValue :: Value, tvTag :: RTag}
   deriving (Eq, Show)
