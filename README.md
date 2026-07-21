@@ -1,4 +1,4 @@
-# TTpaola: Time-Bounded Consent for Data Privacy Compliance (Haskell Artifact)
+# TT-Paola: Time Bounded Consent for Active Objects
 
 This artifact accompanies the paper *"Time-Bounded Consent for Active Objects"*.
 It is a reference implementation of the timed extension of TTpaola: the type
@@ -127,20 +127,20 @@ time 10: the thread starts and gets stuck. This is the part of the paper's sound
 
 ## Repository layout
 
-| Module | Formal artefact |
-|---|---|
-| src/TTpaola/Syntax.hs | Surface syntax: expressions, tags, policies, programs. delay is a leaf; sequencing e1;e2 is sugar for let _ = e1 in e2. |
-| src/TTpaola/Consent.hs | Consent env, tags, Fig. 3 comply{U,C,T,S}, addConsent, RemExpired, consentLeq. |
-| src/TTpaola/Runtime.hs | Configurations, objects, messages, typed/untyped queues, class table, bootstrap (initConfig). |
-| src/TTpaola/Eval.hs | Value-expression evaluation with tag propagation. |
-| src/TTpaola/Interpreter.hs | Untyped semantics: instantaneous reduction with per-action comply checks, timed reduction, global time advance, bind/activate. |
-| src/TTpaola/Types.hs | Extended types, policy expressions, constraints (Cn), type comparison, initial environments. |
-| src/TTpaola/TypeChecker.hs | Typing rules; per-method inference of (Cn, Um) and delta_out. |
-| src/TTpaola/TypedInterpreter.hs | Typed semantics: reductions without runtime checks, InstAnn, InstCnstr, plcy, non-interference, typed bind/activate. |
-| src/TTpaola/Scheduler.hs | Driver with rule priority instant > bind > activate > time; parametric in typed/untyped. |
-| src/TTpaola/Examples/FoodDelivery.hs | Fig. 2 example (delta1=11, delta2=6); setAddrCons stores addrDB; Example 2 Sigma0. |
-| app/Main.hs | Type-checks the example and prints the initial configuration. |
-| test/ | ConsentTest, EvalTest, InterpreterTest, TypeCheckerTest, MigrationTest, SafetyTest, LitmusTest. |
+- `src/TTpaola/Syntax.hs` — surface syntax (expressions, tags, policies, programs). `delay` is a leaf. Sequencing `e1;e2` is sugar for `let _ = e1 in e2`.
+- `src/TTpaola/Consent.hs` — consent environment, tags, Fig. 3 `comply{U,C,T,S}`, `addConsent`, RemExpired, `consentLeq`.
+- `src/TTpaola/Runtime.hs` — configurations, objects, messages, typed and untyped queues, class table, bootstrap (`initConfig`).
+- `src/TTpaola/Eval.hs` — value-expression evaluation with tag propagation.
+- `src/TTpaola/Interpreter.hs` — untyped semantics: instantaneous reduction with per-action comply checks, timed reduction, global time advance, bind and activate.
+- `src/TTpaola/Types.hs` — extended types, policy expressions, constraints (Cn), type comparison, initial environments.
+- `src/TTpaola/TypeChecker.hs` — typing rules and per-method inference of (Cn, Um) and `delta_out`.
+- `src/TTpaola/TypedInterpreter.hs` — typed semantics: reductions without runtime checks, InstAnn, InstCnstr, `plcy`, non-interference, typed bind and activate.
+- `src/TTpaola/Scheduler.hs` — driver with priority instant > bind > activate > time, parametric in typed or untyped.
+- `src/TTpaola/Examples/FoodDelivery.hs` — Fig. 2 example (`delta1=11`, `delta2=6`), including address store and Example 2 Sigma0.
+- `app/Main.hs` — type-checks the example and prints the initial configuration.
+- `test/` — ConsentTest, EvalTest, InterpreterTest, TypeCheckerTest, MigrationTest, SafetyTest, LitmusTest.
+- `kickstart.sh` — one-shot kick-the-tires script (Docker or local cabal).
+
 
 There is intentionally no concrete-syntax parser: programs are written as
 Haskell values of type Program (see FoodDelivery.hs for the pattern). This
