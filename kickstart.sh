@@ -35,4 +35,3 @@ fi
 echo
 echo "OK: kick-start succeeded."
 echo "Expected test tail: 64 examples, 0 failures"
-echo "Next: follow AE appendix Sec. A.3 (or README claims F1-F7)."

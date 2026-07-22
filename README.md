@@ -167,4 +167,3 @@ docker build -t ttpaola-artifact .
 docker run --rm ttpaola-artifact            # runs the test suite
 docker run --rm ttpaola-artifact cabal run timed-ttpaola
 ```
-
