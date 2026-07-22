@@ -168,6 +168,3 @@ docker run --rm ttpaola-artifact            # runs the test suite
 docker run --rm ttpaola-artifact cabal run timed-ttpaola
 ```
 
-## License
-
-BSD-3-Clause; see LICENSE.
